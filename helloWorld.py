@@ -16,6 +16,8 @@ from aiohttp_graphql import GraphQLView
 from graphql.type.scalars import GraphQLString
 from graphql.type.schema import GraphQLSchema
 
+#from routes import routes
+
 
 def resolve_raises(*args):
     # pylint: disable=unused-argument
@@ -62,7 +64,6 @@ MutationRootType = GraphQLObjectType(
 Shema = GraphQLSchema(QueryRootType,MutationRootType)
 
 async def resolver(context, *args):
-    await
     return 'hey'
 
 async def resolver_1(context, *args):
@@ -131,15 +132,43 @@ async def edit_handle(request):
     response.headers['Content-Language'] = 'en'
     return response
 
+async def login_handle(request):
+    response = aiohttp_jinja2.render_template('login.html', request, {})
+    response.headers['Content-Language'] = 'en'
+    response.headers['login']            = 'yes'
+    return response
+
+async def verify_handle(request):
+    return web.Response(text="Hello, world")
+
+async def error403_handle(request):
+    return web.Response(text="ERROR 403")
 
 
+@web.middleware
+async def my_first_middl(request,handler):
+    info = await request.post()
+    fname = info.get('fname')
+    lname = info.get('lname')
+    if fname == '' or lname == '':
+#        print("403")
+        return web.Response(text="ERROR 403")
+#    print("name:  ", fname, "\n")
+#    print("lname: ", lname, "\n")
+    response = await handler(request)
+    return response
 
-app = web.Application()
-app.add_routes([web.get('/index',index_handle),
-                web.get('/echo', wshandle),
-                web.get('/settings', settings_handle),
-                web.get('/test', test_handle),
-                web.get('/edit', edit_handle)])
+app = web.Application(middlewares = [ my_first_middl ])
+app.add_routes([web.get('/index',       index_handle),
+                web.get('/echo',        wshandle),
+                web.get('/settings',    settings_handle),
+                web.get('/test',        test_handle),
+                web.get('/login',       login_handle),
+                web.post('/verify',      verify_handle),
+                web.get('/edit',        edit_handle)])
+
+#for route in routes:
+#        app.router.add_route(route[0], route[1], route[2])
 
 aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader('templates/'))
 
