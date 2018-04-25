@@ -5,6 +5,80 @@ import aiohttp_jinja2
 import jinja2
 from requests.api import request
 
+from graphql.type.definition import (
+    GraphQLArgument,
+    GraphQLField,
+    GraphQLNonNull,
+    GraphQLObjectType,
+)
+
+from aiohttp_graphql import GraphQLView
+from graphql.type.scalars import GraphQLString
+from graphql.type.schema import GraphQLSchema
+
+
+def resolve_raises(*args):
+    # pylint: disable=unused-argument
+    raise Exception("Throws!")
+
+# Sync schema
+QueryRootType = GraphQLObjectType(
+    name='QueryRoot',
+    fields={
+        'thrower': GraphQLField(
+            GraphQLNonNull(GraphQLString),
+            resolver=resolve_raises,
+        ),
+        'request': GraphQLField(
+            GraphQLNonNull(GraphQLString),
+            resolver=lambda obj, info, *args: \
+                info.context['request'].query.get('q'),
+            ),
+        'context': GraphQLField(
+            GraphQLNonNull(GraphQLString),
+            resolver=lambda obj, info, *args: info.context,
+        ),
+        'test': GraphQLField(
+            type=GraphQLString,
+            args={'who': GraphQLArgument(GraphQLString)},
+            # resolver=lambda obj, args, context, info: \
+            resolver=lambda obj, info, **args: \
+                'Hello %s' % (args.get('who') or 'World'),
+        ),
+    },
+)
+
+
+MutationRootType = GraphQLObjectType(
+    name='MutationRoot',
+    fields={
+        'writeTest': GraphQLField(
+            type=QueryRootType,
+            resolver=lambda *args: QueryRootType
+        )
+    }
+)
+
+Shema = GraphQLSchema(QueryRootType,MutationRootType)
+
+async def resolver(context, *args):
+    await
+    return 'hey'
+
+async def resolver_1(context, *args):
+    return  'hey2'
+
+async def resolver_2(context, *args):
+    return 'hey3'
+
+AsyncQueryType = GraphQLObjectType('AsyncQueryType', {
+    'a': GraphQLField(GraphQLString, resolver=resolver),
+    'b': GraphQLField(GraphQLString, resolver=resolver_1),
+    'c': GraphQLField(GraphQLString, resolver=resolver_2)
+})
+
+AsyncShema = GraphQLSchema(AsyncQueryType)
+
 async def handle(request):
     name = request.match_info.get('name', 'Anonimus')
     text = " Hello, " + name
@@ -29,6 +103,24 @@ async def index_handle(request):
     response.headers['Content-Language'] = 'en'
     return response
 
+async def test_handle(request):
+    content = """
+    <!DOCTYPE html>
+<html>
+<body>
+
+<h2>INDEX</h2>
+
+<p><a href="./settings">Settings</a> </p>
+
+<p><a href="./edit">Edit</a></p>
+
+</body>
+</html>
+    """
+    return web.Response(body=content,content_type='text/html')
+
+
 async def settings_handle(request):   
     response = aiohttp_jinja2.render_template('settings.html', request, {})
     response.headers['Content-Language'] = 'en'
@@ -39,15 +131,19 @@ async def edit_handle(request):
     response.headers['Content-Language'] = 'en'
     return response
 
+
+
+
 app = web.Application()
 app.add_routes([web.get('/index',index_handle),
                 web.get('/echo', wshandle),
                 web.get('/settings', settings_handle),
-                web.get('/edit', edit_handle),
-                web.get('/{name}', handle)])
+                web.get('/test', test_handle),
+                web.get('/edit', edit_handle)])
 
 aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader('templates/'))
 
+GraphQLView.attach(app, schema=AsyncShema, graphiql=True)
 
 web.run_app(app)
     
